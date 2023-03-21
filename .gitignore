@@ -9,6 +9,8 @@ processed_data_original/
 benchmark/
 **/*.pkl
 AMASS/
+DFKI DATASET/*
+Hide BVH
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
