@@ -14,12 +14,14 @@ from rmi.model.network import Decoder, Discriminator, InputEncoder, LSTMNetwork
 from rmi.model.noise_injector import noise_injector
 from rmi.model.positional_encoding import PositionalEncoding
 from rmi.model.skeleton import (Skeleton, amass_offsets, sk_joints_to_remove,
-                                sk_offsets, sk_parents)
+                                sk_offsets, sk_parents, dfki_joints_to_remove, dfki_offsets, dfki_parents)
 import shutil
 
 def train():
     # Load configuration from yaml
-    config = yaml.safe_load(open('./config/config_base.yaml', 'r').read())
+    #config = yaml.safe_load(open('./config/config_base.yaml', 'r').read())
+    config = yaml.safe_load(open('./config/config2_base.yaml', 'r').read())
+
 
     # Set device to use
     gpu_id = config['device']['gpu_id']
@@ -33,13 +35,23 @@ def train():
     pathlib.Path(config['data']['processed_data_dir']).mkdir(parents=True, exist_ok=True)
     
     # Load Skeleton
+    #Maybe edit here as well, also sk_...
+
+    '''
     offset = sk_offsets if config['data']['dataset'] == 'LAFAN' else amass_offsets
     skeleton = Skeleton(offsets=offset, parents=sk_parents, device=device)
     skeleton.remove_joints(sk_joints_to_remove)
+    '''
+    # Edit - Niklas
+    offset = dfki_offsets if config['data']['dataset'] == 'DFKI' else amass_offsets
+    skeleton = Skeleton(offsets=offset, parents=dfki_parents, device=device)
+    skeleton.remove_joints(dfki_joints_to_remove)
     
     # Flip, Load and preprocess data. It utilizes LAFAN1 utilities
+    #if config['data']['flip_bvh']:
+       # flip_bvh(config['data']['data_dir'], skip='subject5')
     if config['data']['flip_bvh']:
-        flip_bvh(config['data']['data_dir'], skip='subject5')
+        flip_bvh(config['data']['data_dir'], skip='subject2')
 
     training_frames = config['model']['training_frames']
     lafan_dataset = LAFAN1Dataset(lafan_path=config['data']['data_dir'], processed_data_dir=config['data']['processed_data_dir'], train=True, 

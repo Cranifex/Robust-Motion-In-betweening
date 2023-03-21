@@ -17,20 +17,27 @@ from rmi.model.network import Decoder, InputEncoder, LSTMNetwork
 from rmi.model.positional_encoding import PositionalEncoding
 from rmi.vis.pose import plot_pose
 from rmi.model.skeleton import (Skeleton, sk_joints_to_remove, sk_offsets,
-                                sk_parents, joint_names)
+                                sk_parents, joint_names, dfki_joints_to_remove, dfki_offsets, dfki_parents)
 
 
 def test():
     # Load configuration from yaml
-    config = yaml.safe_load(open('./config/config_base.yaml', 'r').read())
+    #config = yaml.safe_load(open('./config/config_base.yaml', 'r').read())
+    config = yaml.safe_load(open('./config/config2_base.yaml', 'r').read())
 
     # Set device to use
     gpu_id = config['device']['gpu_id']
     device = torch.device("cpu")
+    print("Test GPU id",gpu_id)
 
     # Prepare Directory
     time_stamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-    saved_weight_path = config['test']['saved_weight_path']
+    #saved_weight_path = config['test']['saved_weight_path']
+    
+    #saved_weight_path = 'model_weights/LAFAN/trained_weight_5'
+    saved_weight_path = 'model_weights/DFKI/trained_weight_5'
+
+    print("Path to trained weights: ", saved_weight_path)
     result_path = os.path.join('results', time_stamp)
     result_gif_path = os.path.join(result_path, 'gif')
     pathlib.Path(result_gif_path).mkdir(parents=True, exist_ok=True)
@@ -38,14 +45,21 @@ def test():
 
     # training_frames = config['model']['training_frames']
     training_frames = config['test']['test_frames']
+    print("training frames print: ", training_frames)
     window = 51
 
     # Load Skeleton
+    '''
     skeleton = Skeleton(offsets=sk_offsets, parents=sk_parents, device=device)
     skeleton.remove_joints(sk_joints_to_remove)
+    ''' 
+    #Edit- Niklas
+    skeleton = Skeleton(offsets=dfki_offsets, parents=dfki_parents, device=device)
+    skeleton.remove_joints(dfki_joints_to_remove)
 
     # Load and preprocess data. It utilizes LAFAN1 utilities
-    lafan_dataset_test = LAFAN1Dataset(lafan_path=config['data']['data_dir'], processed_data_dir=config['test']['processed_data_dir'], train=False, device=device, window=window, training_frames=training_frames)
+    lafan_dataset_test = LAFAN1Dataset(lafan_path=config['data']['data_dir'], processed_data_dir=config['data']['processed_data_dir'], train=False, 
+                                  device=device, window=config['model']['window'], dataset=config['data']['dataset'])
     lafan_data_loader_test = DataLoader(lafan_dataset_test, batch_size=config['model']['batch_size'], shuffle=False, num_workers=config['data']['data_loader_workers'])
 
     inference_batch_index = config['test']['inference_batch_index']
@@ -186,6 +200,7 @@ def test():
                 in_between_pose = pose_stack.pop(0)
                 assert len(pose_stack) == 0
                 pose_stack.append(pos_pred[inference_batch_index, 0].numpy())
+                
                 in_between_true = global_pos[inference_batch_index, t+9].numpy()
                 target_pose = global_pos[inference_batch_index, training_frames-1+9].numpy()
 
@@ -198,13 +213,15 @@ def test():
 
                 write_json(filename=os.path.join(pose_path, f'{t:05}.json'), local_q=local_q_pred_t, root_pos=root_pred_t, joint_names=joint_names)
 
-                if config['test']['plot']:
+                #if config['test']['plot']:
+                if 1==1 :
                     pred_image_path = os.path.join(result_path, 'pred')
                     pathlib.Path(pred_image_path).mkdir(parents=True, exist_ok=True)
                     plot_pose(start_pose, in_between_pose, target_pose, t, skeleton, pred_image_path, prefix='pred_')
                     gt_image_path = os.path.join(result_path, 'gt')
                     pathlib.Path(gt_image_path).mkdir(parents=True, exist_ok=True)
                     plot_pose(start_pose, in_between_true, target_pose, t, skeleton, gt_image_path, prefix='gt_')
+                    #plot_pose(in_between_true, in_between_true, in_between_true, t, skeleton, gt_image_path, prefix='gt_')
 
                     pred_img = Image.open('results/'+ time_stamp +'/pred/pred_'+str(t)+'.png', 'r')
                     gt_img = Image.open('results/'+ time_stamp +'/gt/gt_'+str(t)+'.png', 'r')
@@ -213,7 +230,8 @@ def test():
                     img_gt.append(gt_img)
                     img_integrated.append(np.concatenate([pred_img, gt_img.resize(pred_img.size)], 1))
             
-            if config['test']['plot']:
+            #if config['test']['plot']:
+            if 1==1:
                 # if i_batch < 49:
                 gif_path = os.path.join(result_gif_path, 'img_%02d.gif' % i_batch)
                 imageio.mimsave(gif_path, img_integrated, duration=0.1)

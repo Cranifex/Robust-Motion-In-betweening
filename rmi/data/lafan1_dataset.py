@@ -39,6 +39,10 @@ class LAFAN1Dataset(Dataset):
             self.actors = (
                 ["subject1", "subject2", "subject3"] if train else ["subject4"]
             )
+        elif self.dataset == 'DFKI':
+            self.actors = (
+                ["subject1"] if train else ["subject2"]
+            )
         else:
             ValueError("Invalid Dataset")
         

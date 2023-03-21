@@ -1,11 +1,11 @@
 data:
-    data_dir: 'ubisoft-laforge-animation-dataset/output/BVH'
+    data_dir: 'DFKI DATASET'
     data_loader_workers: 0
-    skeleton_path: 'ubisoft-laforge-animation-dataset/output/BVH/walk1_subject1.bvh'
-    processed_data_dir: 'processed_data'
+    skeleton_path: 'DFKI DATASET/subject1_IdleLook-001.bvh'
+    processed_data_dir: 'processed_data_DFKI'
     flip_bvh: true
-    dataset: 'LAFAN'
-    exp_name: 'LAFAN'
+    dataset: 'DFKI'
+    exp_name: 'DFKI'
 
 device:
     gpu_id: 0
@@ -32,7 +32,7 @@ log:
     weight_save_interval: 5 #25
 
 test:
-    data_dir: 'ubisoft-laforge-animation-dataset/output/BVH'
+    data_dir: 'DFKI DATASET'
     saved_weight_path: ''
     processed_data_dir: 'processed_data'
     test_frames: 40
