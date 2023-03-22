@@ -134,14 +134,16 @@ def plot_pose(
     z_max = np.max(
         [start_pose[:, 2].max(), inbetween_pose[:, 2].max(), target_pose[:, 2].max()]
     )
-
-    ax.set_xlim(x_min, x_max)
+    min = np.min([x_min, y_min, z_min])
+    max = np.max([x_max, y_max, z_max])
+    #Edit Niklas
+    ax.set_xlim(min, max)
     ax.set_xlabel("$X$ Axis")
 
-    ax.set_ylim(z_min, z_max)
+    ax.set_ylim(min, max)
     ax.set_ylabel("$Y$ Axis")
 
-    ax.set_zlim(y_min, y_max)
+    ax.set_zlim(min, max)
     ax.set_zlabel("$Z$ Axis")
 
     plt.draw()

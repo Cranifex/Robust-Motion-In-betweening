@@ -35,7 +35,7 @@ def test():
     #saved_weight_path = config['test']['saved_weight_path']
     
     #saved_weight_path = 'model_weights/LAFAN/trained_weight_5'
-    saved_weight_path = 'model_weights/DFKI/trained_weight_5'
+    saved_weight_path = 'model_weights/DFKI/trained_weight_10'
 
     print("Path to trained weights: ", saved_weight_path)
     result_path = os.path.join('results', time_stamp)
