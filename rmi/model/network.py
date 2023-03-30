@@ -40,7 +40,8 @@ class LSTMNetwork(nn.Module):
         )
 
     def forward(self, x):
-        x, (self.h, self.c) = self.lstm(x, (self.h, self.c))
+        with torch.no_grad():
+            x, (self.h, self.c) = self.lstm(x, (self.h, self.c))
         return x
 
 

@@ -4,6 +4,7 @@ import pathlib
 import numpy as np
 import torch
 import yaml
+import torch.onnx
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -16,6 +17,10 @@ from rmi.model.positional_encoding import PositionalEncoding
 from rmi.model.skeleton import (Skeleton, amass_offsets, sk_joints_to_remove,
                                 sk_offsets, sk_parents, dfki_joints_to_remove, dfki_offsets, dfki_parents)
 import shutil
+
+
+def saveOnnx(state_encoder, target_encoder, offset_encoder, lstm, decoder, short_discriminator, long_discriminator, generator_optimizer, discriminator_optimizer):
+    torch.onnx.export(state_encoder)
 
 def train():
     # Load configuration from yaml
@@ -335,7 +340,32 @@ def train():
             if config['model']['save_optimizer']:
                 torch.save(generator_optimizer.state_dict(), weight_path + '/generator_optimizer.pkl')
                 torch.save(discriminator_optimizer.state_dict(), weight_path + '/discriminator_optimizer.pkl')
+            
+            state_encoder.eval()
+            torch.onnx.export(state_encoder,
+                               state_input,
+                                weight_path + "\state_encoder.onnx",
+                                export_params= True,
+                                opset_version=9)
+            
+            target_encoder.eval()
+            torch.onnx.export(target_encoder, target_input, weight_path + "\\target_encoder.onnx", export_params=True, opset_version=9)
+            
+            offset_encoder.eval()
+            torch.onnx.export(offset_encoder, offset_input, weight_path + "\offset_encoder.onnx", export_params=True, opset_version=9)
+            
+            #Very Error, much confusion
+            lstm.eval()
+            torch.onnx.export(lstm, h_in, weight_path + "\lstm.onnx",  opset_version=9)
 
+            decoder.eval()
+            torch.onnx.export(decoder, h_out, weight_path + "\decoder.onnx", export_params=True,  opset_version=9)
+
+            short_discriminator.eval()
+            torch.onnx.export(short_discriminator, real_input, weight_path + "\short_discriminator.onnx", export_params=True,  opset_version=9)
+
+            long_discriminator.eval()
+            torch.onnx.export(long_discriminator, real_input, weight_path + "\long_discriminator.onnx", export_params=True,  opset_version=9)
 
 if __name__ == '__main__':
     train()

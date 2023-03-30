@@ -5,6 +5,7 @@ from datetime import datetime
 import imageio
 import numpy as np
 import torch
+import onnx
 import yaml
 from kpt.model.skeleton import TorchSkeleton
 from PIL import Image
@@ -35,7 +36,7 @@ def test():
     #saved_weight_path = config['test']['saved_weight_path']
     
     #saved_weight_path = 'model_weights/LAFAN/trained_weight_5'
-    saved_weight_path = 'model_weights/DFKI/trained_weight_10'
+    saved_weight_path = 'model_weights/DFKI/trained_weight_2'
 
     print("Path to trained weights: ", saved_weight_path)
     result_path = os.path.join('results', time_stamp)
@@ -71,9 +72,11 @@ def test():
 
     # Initializing networks
     state_in = root_v_dim + local_q_dim + contact_dim
-    state_encoder = InputEncoder(input_dim=state_in)
-    state_encoder.to(device)
-    state_encoder.load_state_dict(torch.load(os.path.join(saved_weight_path, 'state_encoder.pkl'), map_location=device))
+    #state_encoder = InputEncoder(input_dim=state_in)
+    #state_encoder.to(device)
+    #state_encoder.load_state_dict(torch.load(os.path.join(saved_weight_path, 'state_encoder.pkl'), map_location=device))
+    state_encoder= onnx.load(saved_weight_path +'state_encoder.onnx')
+    onnx.checker.check_model(state_encoder)
 
     offset_in = root_v_dim + local_q_dim
     offset_encoder = InputEncoder(input_dim=offset_in)
@@ -100,7 +103,7 @@ def test():
 
     print("MODELS LOADED WITH SAVED WEIGHTS")
 
-    state_encoder.eval()
+    #state_encoder.eval()
     offset_encoder.eval()
     target_encoder.eval()
     lstm.eval()
