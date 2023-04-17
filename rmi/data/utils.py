@@ -66,13 +66,15 @@ def flip_bvh(bvh_folder: str, skip: str):
                 # Followings are very helpful to understand which axis needs to be inverted
                 # http://lo-th.github.io/olympe/BVH_player.html
                 # https://quaternions.online/
-                #str_to_num = line.split(' ')[:-1]  # Extract number only
-                #Edit - Niklas
-                str_to_num = line.split(' ')  # Extract number only
+                if(skip == 'subject5'):
+                    str_to_num = line.split(' ')[:-1]  # Extract number only
+                    motion_mat = np.array([float(x) for x in str_to_num]).reshape(23, 3) # Hips 6 Channel + 3 * 21 = 69
+               
+                else:
+                     #Edit - Niklas
+                    str_to_num = line.split(' ')  # Extract number only
+                    motion_mat = np.array([float(x) for x in str_to_num]).reshape(24, 3) # Hips 6 Channel + 3 * 22 = 72
                 
-                #motion_mat = np.array([float(x) for x in str_to_num]).reshape(23, 3) # Hips 6 Channel + 3 * 21 = 69
-                #Edit - Niklas
-                motion_mat = np.array([float(x) for x in str_to_num]).reshape(24, 3) # Hips 6 Channel + 3 * 22 = 72
 
                 motion_mat[0,2] *= -1.0  # Invert translation Z axis (forward-backward)
                 quat = euler_to_quaternion(np.radians(motion_mat[1:]), 'zyx')  # This function takes radians
@@ -86,8 +88,12 @@ def flip_bvh(bvh_folder: str, skip: str):
                 right_idx = [6,7,8,9,19,20,21,22]  # From 6: RightUpLeg...
                 motion_mat[left_idx+right_idx] = motion_mat[right_idx+left_idx].copy()
                 motion_mat = np.round(motion_mat, decimals=6)
-                #motion_vector = np.reshape(motion_mat, (69,))
-                motion_vector = np.reshape(motion_mat, (72,))
+
+                if(skip == 'subject5'):
+                    motion_vector = np.reshape(motion_mat, (69,))
+                else:
+                    #Edit-Niklas
+                    motion_vector = np.reshape(motion_mat, (72,))
                 motion_part_str = ''
                 for s in motion_vector:
                     motion_part_str += (str(s) + ' ')

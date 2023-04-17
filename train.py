@@ -1,5 +1,6 @@
 import os
 import pathlib
+import argparse
 
 import numpy as np
 import torch
@@ -8,6 +9,8 @@ import torch.onnx
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+from torch.utils.tensorboard import SummaryWriter
+
 
 from rmi.data.lafan1_dataset import LAFAN1Dataset
 from rmi.data.utils import flip_bvh
@@ -19,15 +22,15 @@ from rmi.model.skeleton import (Skeleton, amass_offsets, sk_joints_to_remove,
 import shutil
 
 
-def saveOnnx(state_encoder, target_encoder, offset_encoder, lstm, decoder, short_discriminator, long_discriminator, generator_optimizer, discriminator_optimizer):
-    torch.onnx.export(state_encoder)
-
-def train():
+def train(dataset, log):
     # Load configuration from yaml
-    #config = yaml.safe_load(open('./config/config_base.yaml', 'r').read())
-    config = yaml.safe_load(open('./config/config2_base.yaml', 'r').read())
+    if(dataset == 'LAFAN'):
+        config = yaml.safe_load(open('./config/config_base.yaml', 'r').read())
+    else:
+        config = yaml.safe_load(open('./config/config2_base.yaml', 'r').read())
 
-
+    #Create Writer for Tensorboard
+    writer = SummaryWriter()
     # Set device to use
     gpu_id = config['device']['gpu_id']
     device = torch.device(f"cuda:{gpu_id}" if torch.cuda.is_available() else "cpu")
@@ -40,23 +43,27 @@ def train():
     pathlib.Path(config['data']['processed_data_dir']).mkdir(parents=True, exist_ok=True)
     
     # Load Skeleton
-    #Maybe edit here as well, also sk_...
-
-    '''
-    offset = sk_offsets if config['data']['dataset'] == 'LAFAN' else amass_offsets
-    skeleton = Skeleton(offsets=offset, parents=sk_parents, device=device)
-    skeleton.remove_joints(sk_joints_to_remove)
-    '''
-    # Edit - Niklas
-    offset = dfki_offsets if config['data']['dataset'] == 'DFKI' else amass_offsets
-    skeleton = Skeleton(offsets=offset, parents=dfki_parents, device=device)
-    skeleton.remove_joints(dfki_joints_to_remove)
+    if(dataset == 'LAFAN'):
+        offset = sk_offsets if config['data']['dataset'] == 'LAFAN' else amass_offsets
+        skeleton = Skeleton(offsets=offset, parents=sk_parents, device=device)
+        skeleton.remove_joints(sk_joints_to_remove)
+    else:
+        # Edit - Niklas
+        offset = dfki_offsets if config['data']['dataset'] == 'DFKI' else amass_offsets
+        skeleton = Skeleton(offsets=offset, parents=dfki_parents, device=device)
+        skeleton.remove_joints(dfki_joints_to_remove)
+    
+    batch_size = config['model']['batch_size']
     
     # Flip, Load and preprocess data. It utilizes LAFAN1 utilities
-    #if config['data']['flip_bvh']:
-       # flip_bvh(config['data']['data_dir'], skip='subject5')
-    if config['data']['flip_bvh']:
-        flip_bvh(config['data']['data_dir'], skip='subject2')
+    #Edit - Niklas
+
+    if(dataset == 'LAFAN'):
+        if config['data']['flip_bvh']:
+            flip_bvh(config['data']['data_dir'], skip='subject5')
+    else:
+        if config['data']['flip_bvh']:
+            flip_bvh(config['data']['data_dir'], skip='subject2')
 
     training_frames = config['model']['training_frames']
     lafan_dataset = LAFAN1Dataset(lafan_path=config['data']['data_dir'], processed_data_dir=config['data']['processed_data_dir'], train=True, 
@@ -75,13 +82,22 @@ def train():
     state_encoder = InputEncoder(input_dim=state_in)
     state_encoder.to(device)
 
+    state_tensor = torch.empty((batch_size, state_in))
+    state_tensor = state_tensor.to(device)
+
     offset_in = root_v_dim + local_q_dim
     offset_encoder = InputEncoder(input_dim=offset_in)
     offset_encoder.to(device)
 
+    offset_tensor = torch.empty((batch_size, offset_in))
+    offset_tensor = offset_tensor.to(device)
+
     target_in = local_q_dim
     target_encoder = InputEncoder(input_dim=target_in)
     target_encoder.to(device)
+    
+    target_tensor = torch.empty((batch_size, target_in))
+    target_tensor = target_tensor.to(device)
 
     # LSTM
     lstm_in = state_encoder.out_dim * 3
@@ -125,6 +141,7 @@ def train():
         decoder.train()
 
         batch_pbar = tqdm(lafan_data_loader, position=1, desc="Batch")
+        saved_loss = 100
         for sampled_batch in batch_pbar:
             loss_pos = 0
             loss_quat = 0
@@ -132,6 +149,9 @@ def train():
             loss_root = 0
 
             current_batch_size = len(sampled_batch['global_pos'])
+            if(current_batch_size is not batch_size):
+                #print('Current batch size not batch size, we break here')
+                break
 
             # state input
             local_q = sampled_batch['local_q'].to(device)
@@ -261,11 +281,16 @@ def train():
             # 3.7.3: We scale all of our losses to be approximately equal on the LaFAN1 dataset 
             # for an untrained network before tuning them with custom weights.
             loss_pos = torch.mean(torch.sum(torch.abs(pos_preds - pos_next_stack), dim=1) / pos_std) / training_frames
-            loss_root = torch.mean(torch.sum(torch.abs(root_pred_stack - root_p_next_list), dim=1) / pos_std[0]) / training_frames
-            loss_global_quat = torch.norm((pos_rot - rot_next_stack), dim=(2,3)).mean()
+            loss_root = torch.mean(torch.sum(torch.abs(root_pred_stack - root_p_next_list), dim=1) / pos_std[0]) / training_frames            
+            loss_global_quat = torch.norm((pos_rot - rot_next_stack), dim=(2,3)).mean()            
             loss_quat = torch.mean(torch.sum(torch.abs(local_q_pred_stack - local_q_next_list.reshape(current_batch_size, training_frames, lafan_dataset.num_joints, -1)), dim=1)) / training_frames
             loss_contact = torch.mean(torch.sum(torch.abs(contact_pred_stack - contact_next_list), dim=1)) / training_frames
-            
+            if(not log):
+                writer.add_scalar("positional loss", loss_pos, epoch)
+                writer.add_scalar("root loss", loss_root, epoch)
+                writer.add_scalar("global quaternial loss", loss_global_quat, epoch)
+                writer.add_scalar("quaternial loss", loss_quat, epoch)
+                writer.add_scalar("contact loss", loss_contact, epoch)
             # Adversarial
             fake_gan_input = torch.cat([global_pos[:,0+10].reshape(current_batch_size, -1).unsqueeze(1), pos_preds.reshape(current_batch_size, training_frames, -1)], dim=1)
             fake_pos_input = fake_gan_input[:,:training_frames+1,:].permute(0,2,1)
@@ -306,14 +331,33 @@ def train():
             
             # Adversarial
             short_fake_logits = torch.mean(short_discriminator(fake_input)[:,0], 1)
-            short_g_loss = torch.mean((short_fake_logits -  1) ** 2)
+            short_g_loss = torch.mean((short_fake_logits -  1) ** 2)            
+
             long_fake_logits = torch.mean(long_discriminator(fake_input)[:,0], 1)
-            long_g_loss = torch.mean((long_fake_logits -  1) ** 2)
+            long_g_loss = torch.mean((long_fake_logits -  1) ** 2)            
+
             total_g_loss = config['model']['loss_generator_weight'] * (long_g_loss + short_g_loss)
             loss_total += total_g_loss
 
+            if(not log):
+                writer.add_scalar("short_g_loss", short_g_loss, epoch)
+                writer.add_scalar("long_g_loss", long_g_loss, epoch)
+
+
             # TOTAL LOSS
             loss_total.backward()
+            if(not log):
+                writer.add_scalar("loss_total", loss_total, epoch)
+            else:
+                if(loss_total < saved_loss):
+                    saved_loss = loss_total
+                    saved_pos_loss = loss_pos
+                    saved_root_loss= loss_root
+                    saved_global_quat_loss = loss_global_quat
+                    saved_quat_loss = loss_quat
+                    saved_contact_loss = loss_contact
+                    saved_short_g_loss = short_g_loss
+                    saved_long_g_loss = long_g_loss
 
             # Gradient clipping for training stability
             torch.nn.utils.clip_grad_norm_(state_encoder.parameters(), 1.0)
@@ -324,7 +368,19 @@ def train():
             torch.nn.utils.clip_grad_norm_(short_discriminator.parameters(), 1.0)
             torch.nn.utils.clip_grad_norm_(long_discriminator.parameters(), 1.0)
             generator_optimizer.step()
+
             batch_pbar.set_postfix({'LOSS': np.round(loss_total.item(), decimals=3)})
+
+        if(log):
+            writer.add_scalar("loss_total", saved_loss, epoch)
+            writer.add_scalar("positional loss", saved_pos_loss, epoch)
+            writer.add_scalar("root loss", saved_root_loss, epoch)
+            writer.add_scalar("global quaternial loss", saved_global_quat_loss, epoch)
+            writer.add_scalar("quaternial loss", saved_quat_loss, epoch)
+            writer.add_scalar("contact loss", saved_contact_loss, epoch)
+            writer.add_scalar("short_g_loss", saved_short_g_loss, epoch)
+            writer.add_scalar("long_g_loss", saved_long_g_loss, epoch)
+        
 
         if (epoch + 1) % config['log']['weight_save_interval'] == 0:
             weight_epoch = 'trained_weight_' + str(epoch + 1)
@@ -343,16 +399,16 @@ def train():
             
             state_encoder.eval()
             torch.onnx.export(state_encoder,
-                               state_input,
+                               state_tensor,
                                 weight_path + "\state_encoder.onnx",
                                 export_params= True,
                                 opset_version=9)
             
             target_encoder.eval()
-            torch.onnx.export(target_encoder, target_input, weight_path + "\\target_encoder.onnx", export_params=True, opset_version=9)
+            torch.onnx.export(target_encoder, target_tensor, weight_path + "\\target_encoder.onnx", export_params=True, opset_version=9)
             
             offset_encoder.eval()
-            torch.onnx.export(offset_encoder, offset_input, weight_path + "\offset_encoder.onnx", export_params=True, opset_version=9)
+            torch.onnx.export(offset_encoder, offset_tensor, weight_path + "\offset_encoder.onnx", export_params=True, opset_version=9)
             
             #Very Error, much confusion
             lstm.eval()
@@ -367,5 +423,23 @@ def train():
             long_discriminator.eval()
             torch.onnx.export(long_discriminator, real_input, weight_path + "\long_discriminator.onnx", export_params=True,  opset_version=9)
 
+    writer.flush()
+
 if __name__ == '__main__':
-    train()
+        #Create a parser as I am too lazy to always change code..
+    parser = argparse.ArgumentParser(description='Optional runtime parameters for train script. \n\nDefault: \nDataset: DFKI\nFiletype: ONNX')
+    parser.add_argument('-D' , '--Dataset', help= 'Optional argument to clarify which Dataset to use. Either DFKI or LAFAN are valid inputs.')
+    parser.add_argument('-L', '--Logtype', help= 'Optional switch to let it log in every batch instead of best result of epoch. Default we log every epoch', action='store_false' )
+
+    args = parser.parse_args()
+
+    d = 'DFKI'
+    if args.Dataset is not None:
+        if(str(args.Dataset).upper() == 'DFKI' or str(args.Dataset).upper() == 'LAFAN'): 
+            d = str(args.Dataset).upper()
+        else:
+            print('Currently: Only LAFAN and DFKI Datasets are supported. Using Default: DFKI')
+    
+    print('Using dataset ', d)
+    #print(args.Logtype)
+    train(d, args.Logtype)

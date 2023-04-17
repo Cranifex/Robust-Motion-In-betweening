@@ -12,7 +12,7 @@ device:
 
 model:
     batch_size: 32
-    epochs: 5  #500
+    epochs: 500  #500
     loss_quat_weight: 1.20
     loss_root_weight: 1.0
     loss_pos_weight: 0.75
@@ -29,11 +29,11 @@ model:
     window: 51 # +11
     
 log:
-    weight_save_interval: 5 #25
+    weight_save_interval: 100 #25
 
 test:
     data_dir: 'ubisoft-laforge-animation-dataset/output/BVH'
-    saved_weight_path: ''
+    saved_weight_path: 'model_weights\LAFAN\trained_weight_5'
     processed_data_dir: 'processed_data'
     test_frames: 40
     test_window: 50
