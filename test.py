@@ -335,6 +335,8 @@ if __name__ == '__main__':
     if(args.Filetype is not None):
         if(str(args.Filetype).upper() == 'ONNX' or str(args.Filetype).upper() == 'PKL'):
             f = str(args.Filetype).upper()
+        else: 
+            print('Filetype not supported. Using default ONNX')
 
     print('Using dataset ', d, ' and filetype ', f)
     test(d, f)
